@@ -62,10 +62,10 @@ type Alt a = ( Int      -- tag
 type CoreAlt = Alt Name
 
 -- | True if the expression has no internal structure
-isAtomic :: Expr a -> Bool
-isAtomic (Var _) = True
-isAtomic (Num _) = True
-isAtomic _       = False
+isAtomicExpr :: Expr a -> Bool
+isAtomicExpr (Var _) = True
+isAtomicExpr (Num _) = True
+isAtomicExpr _       = False
 
 
 -- | A supercombinator definion
