@@ -2,7 +2,7 @@
  - A pretty printer for the Core language.
  -}
 
-module Tamien.Core.Print where
+module Tamien.Core.Printer where
 
 import Tamien.Core.Language
 
@@ -15,7 +15,7 @@ printExpr :: CoreExpr -> String
 printExpr = render . docExpr
 
 docProgram :: CoreProgram -> Doc
-docProgram = vcat . punctuate (text "" $$ text "") . map docScDefn
+docProgram = vcat . punctuate (space <> semi) . map docScDefn
 
 docScDefn :: CoreScDefn -> Doc
 docScDefn (name, vs, e)
@@ -24,7 +24,7 @@ docScDefn (name, vs, e)
 docExpr :: CoreExpr -> Doc
 docExpr (Var v)      = text v
 docExpr (Num n)      = int n
-docExpr (Constr t a) = undefined
+docExpr (Constr t a) = text "Pack" <> lbrace <> int t <> comma <> int a <> rbrace
 docExpr (App e1 e2)  = docExpr e1 <+> docAExpr e2
 docExpr (Let isrec defns expr)
     =   text isrecstr
