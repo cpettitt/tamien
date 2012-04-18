@@ -1,0 +1,16 @@
+Name:                tamien
+Version:             0.1
+Synopsis:            Functional Language Exploration
+License:             MIT
+License-file:        LICENSE
+Author:              Chris Pettitt
+Maintainer:          chris@samsarin.com
+Category:            Language
+
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Library
+  Exposed-modules:     Tamien.Core.Language
+  Build-depends:       base, parsec, QuickCheck
+  Ghc-options:         -Wall
