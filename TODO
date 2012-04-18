@@ -1,0 +1,11 @@
+* Core
+    * Parser
+    * Pretty printer
+* Reduction engines (to be fleshed out)
+    * Template instantation
+    * G-machine
+    * Lambda calculus
+        * Converter
+        * Beta reduction
+        * Alpha conversion
+        * Eta reduction
