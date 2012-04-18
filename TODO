@@ -1,6 +1,5 @@
 * Core
     * Parser
-    * Pretty printer
 * Reduction engines (to be fleshed out)
     * Template instantation
     * G-machine
