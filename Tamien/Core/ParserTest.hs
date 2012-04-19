@@ -39,7 +39,7 @@ instance Arbitrary CoreAlt where
 check s a = printf "%-25s: " s >> quickCheck a
 
 prop_printParse (NonEmpty prog)
-    = case parseProgram (printProgram prog) of
+    = case parse (printProgram prog) of
         Left  err -> False
         Right x   -> x == prog
 

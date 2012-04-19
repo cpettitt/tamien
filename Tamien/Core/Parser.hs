@@ -3,7 +3,7 @@
  -}
 
 module Tamien.Core.Parser
-    ( parseProgram
+    ( parse
     , parseExpr
     , isKeyword
     ) where
@@ -12,18 +12,24 @@ import Tamien.Core.Language
 
 import Control.Applicative ((<$>), (<*>), (<*), (*>))
 import Data.List (foldl1')
-import Text.Parsec
+import Text.Parsec hiding (parse, runParser)
+import qualified Text.Parsec as P
 import Text.Parsec.String (Parser)
 import qualified Text.Parsec.Token as PT
 
 -- PARSER
 
-parseProgram :: String -> Either ParseError CoreProgram
-parseProgram = parse pProgram ""
+parse:: String -> Either String CoreProgram
+parse = runParser pProgram
 
+parseExpr :: String -> Either String CoreExpr
+parseExpr = runParser pExpr
 
-parseExpr :: String -> Either ParseError CoreExpr
-parseExpr = parse pExpr ""
+runParser :: Parser a -> String -> Either String a
+runParser p str
+    = case P.parse p "" str of
+        Left err -> Left $ show err
+        Right x  -> Right x
 
 pProgram :: Parser CoreProgram
 pProgram = semiSep1 pScDefn
