@@ -29,7 +29,7 @@ data Expr a
     | Lam                   -- Lambda abstractions!
         [a]                 --      bound variables
         (Expr a)            --      abstraction body
-      deriving Eq
+      deriving (Eq, Show)
 
 -- | Unique identifier
 type Name = String
@@ -55,24 +55,21 @@ rhssOf :: [(a, b)] -> [b]
 rhssOf = map snd
 
 -- | Alternatives in a case statement
-type Alt a = ( Int      -- tag
-             , [a]      -- bound variables
-             , Expr a   -- alternative body
-             )
+data Alt a
+    = Alt Int      -- tag
+          [a]      -- bound variables
+          (Expr a) -- alternative body
+    deriving (Eq, Show)
 type CoreAlt = Alt Name
 
--- | True if the expression has no internal structure
-isAtomicExpr :: Expr a -> Bool
-isAtomicExpr (Var _) = True
-isAtomicExpr (Num _) = True
-isAtomicExpr _       = False
-
-
 -- | A supercombinator definion
-type ScDefn a = ( Name      -- Name of the supercombinator
-                , [a]       -- Arguments
-                , Expr a    -- Body
-                )
+data ScDefn a
+    = ScDefn
+        Name      -- Name of the supercombinator
+        [a]       -- Arguments
+        (Expr a)  -- Body
+    deriving (Eq, Show)
+
 type CoreScDefn = ScDefn Name
 
 -- | A program is composed of supercombinator definitions

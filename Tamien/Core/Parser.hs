@@ -2,7 +2,11 @@
  - A parser for the Core language.
  -}
 
-module Tamien.Core.Parser where
+module Tamien.Core.Parser
+    ( parseProgram
+    , parseExpr
+    , isKeyword
+    ) where
 
 import Tamien.Core.Language
 
@@ -14,57 +18,76 @@ import qualified Text.Parsec.Token as PT
 
 -- PARSER
 
-parseExpr :: Parser CoreExpr
-parseExpr = choice [ parseApp
-                   , parseLet
-                   , parseLetRec
---                   , parseCase
-                   , parseLam
-                   , parseAExpr
-                   ]
+parseProgram :: String -> Either ParseError CoreProgram
+parseProgram = parse pProgram ""
 
-parseApp :: Parser CoreExpr
-parseApp = foldl1' App <$> many1 parseAExpr
 
-parseLam :: Parser CoreExpr
-parseLam = Lam <$> (backslash *> many1 identifier) <*> (arrow *> parseExpr)
+parseExpr :: String -> Either ParseError CoreExpr
+parseExpr = parse pExpr ""
 
-parseLet :: Parser CoreExpr
-parseLet
-    = Let False <$> (reserved "let" *> parseDefns) <*> (reserved "in" *> parseExpr)
+pProgram :: Parser CoreProgram
+pProgram = semiSep1 pScDefn
 
-parseLetRec :: Parser CoreExpr
-parseLetRec
-    = Let True <$> (reserved "letrec" *> parseDefns) <*> (reserved "in" *> parseExpr)
+pScDefn :: Parser CoreScDefn
+pScDefn = ScDefn <$> identifier <*> many identifier <*> (equals *> pExpr)
 
-parseDefns :: Parser [(Name, CoreExpr)]
-parseDefns = semiSep1 parseDefn
+pExpr :: Parser CoreExpr
+pExpr = choice [ pApp
+               , pLet
+               , pLetRec
+               , pCase
+               , pLam
+               , pAExpr
+               ]
 
-parseDefn :: Parser (Name, CoreExpr)
-parseDefn = (,) <$> identifier <* equals <*> parseExpr
+pApp :: Parser CoreExpr
+pApp = foldl1' App <$> many1 pAExpr
 
-parseCase :: Parser CoreExpr
-parseCase = undefined
+pLam :: Parser CoreExpr
+pLam = Lam <$> (backslash *> many1 identifier) <*> (arrow *> pExpr)
 
-parseAExpr :: Parser CoreExpr
-parseAExpr = choice [ parseVar
-                    , parseNum
-                    , parseConstr
-                    , parsePExpr
+pLet :: Parser CoreExpr
+pLet
+    = Let False <$> (reserved "let" *> pDefns) <*> (reserved "in" *> pExpr)
+
+pLetRec :: Parser CoreExpr
+pLetRec
+    = Let True <$> (reserved "letrec" *> pDefns) <*> (reserved "in" *> pExpr)
+
+pDefns :: Parser [(Name, CoreExpr)]
+pDefns = semiSep1 pDefn
+
+pDefn :: Parser (Name, CoreExpr)
+pDefn = (,) <$> identifier <* equals <*> pExpr
+
+pCase :: Parser CoreExpr
+pCase = Case <$> (reserved "case" *> pExpr) <*> (reserved "of" *> braces pAlts)
+
+pAlts :: Parser [CoreAlt]
+pAlts = sepBy1 pAlt semi 
+
+pAlt :: Parser CoreAlt
+pAlt = Alt <$> angles (natural) <*> many identifier <*> (arrow *> pExpr)
+
+pAExpr :: Parser CoreExpr
+pAExpr = choice [ pVar
+                    , pNum
+                    , pConstr
+                    , pPExpr
                     ]
 
-parseVar :: Parser CoreExpr
-parseVar = Var <$> identifier
+pVar :: Parser CoreExpr
+pVar = Var <$> identifier
 
 -- TODO overflow check
-parseNum :: Parser CoreExpr
-parseNum = Num <$> natural
+pNum :: Parser CoreExpr
+pNum = Num <$> natural
 
-parseConstr :: Parser CoreExpr
-parseConstr = reserved "Pack" *> braces (Constr <$> natural <* comma  <*> natural)
+pConstr :: Parser CoreExpr
+pConstr = reserved "Pack" *> braces (Constr <$> natural <* comma  <*> natural)
 
-parsePExpr :: Parser CoreExpr
-parsePExpr = parens parseExpr
+pPExpr :: Parser CoreExpr
+pPExpr = parens pExpr
 
 -- LEXER
 
@@ -87,6 +110,10 @@ lexerDef
         , PT.caseSensitive   = True
         }
 
+isKeyword :: String -> Bool
+isKeyword =  (`elem` (PT.reservedNames lexerDef))
+
+angles     = PT.angles lexer
 arrow      = symbol "->"
 backslash  = symbol "\\"
 braces     = PT.braces lexer
@@ -96,5 +123,6 @@ identifier = PT.identifier lexer
 natural    = fromIntegral <$> PT.natural lexer
 parens     = PT.parens lexer
 reserved   = PT.reserved lexer
+semi       = PT.semi lexer
 semiSep1   = PT.semiSep1 lexer
 symbol     = PT.symbol lexer
