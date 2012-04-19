@@ -1,5 +1,3 @@
-* Core
-    * Parser
 * Reduction engines (to be fleshed out)
     * Template instantation
     * G-machine
