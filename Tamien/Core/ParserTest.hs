@@ -20,17 +20,17 @@ number = suchThat arbitrary (>= 0)
 definition = (,) <$> identifier <*> arbitrary
 
 instance Arbitrary CoreScDefn where
-    arbitrary = ScDefn <$> identifier <*> listOf identifier <*> arbitrary
+    arbitrary = ScDefn <$> identifier <*> resize 5 (listOf identifier) <*> arbitrary
 
 instance Arbitrary CoreExpr where
     arbitrary
-        = frequency [ (330, Var <$> identifier)
-                    , (330, Num <$> number)
-                    , (330, Constr <$> number <*> number)
-                    , (4, App <$> arbitrary <*> arbitrary)
-                    , (2, Let <$> arbitrary <*> listOf1 definition <*> arbitrary)
-                    , (2, Case <$> arbitrary <*> listOf1 arbitrary)
-                    , (3, Lam <$> listOf1 identifier <*> arbitrary)
+        = frequency [ (28, Var <$> identifier)
+                    , (28, Num <$> number)
+                    , (28, Constr <$> number <*> number)
+                    , (5, App <$> arbitrary <*> arbitrary)
+                    , (3, Let <$> arbitrary <*> resize 10 (listOf1 definition) <*> arbitrary)
+                    , (3, Case <$> arbitrary <*> resize 10 (listOf1 arbitrary))
+                    , (5, Lam <$> listOf1 identifier <*> arbitrary)
                     ]
 
 instance Arbitrary CoreAlt where
