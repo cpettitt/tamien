@@ -45,3 +45,5 @@ prop_printParse (NonEmpty prog)
 
 runChecks = do
     check "printParse" prop_printParse
+
+main = runChecks
