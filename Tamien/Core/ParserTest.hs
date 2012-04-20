@@ -12,7 +12,7 @@ import Tamien.TestUtil
 import Control.Applicative ((<$>), (<*>))
 import Test.QuickCheck
 
-varStart = ('_':['a'..'z'])
+varStart = '_':['a'..'z']
 varChar  = varStart ++ ['0'..'9']
 
 identifier = suchThat ((:) <$> elements varStart <*> listOf (elements varChar)) (not . isKeyword)
@@ -41,7 +41,6 @@ prop_printParse (NonEmpty prog)
         Left  err -> False
         Right x   -> x == prog
 
-runChecks = do
-    check "printParse" prop_printParse
+runChecks = check "printParse" prop_printParse
 
 main = runChecks

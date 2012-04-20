@@ -59,7 +59,7 @@ docAlt (Alt tag vs e)
     = angles (int tag) <+> hsep (map text vs) <+> arrow $$ nest 4 (docExpr e)
 
 arrow :: Doc
-arrow = text ("->")
+arrow = text "->"
 
 angles :: Doc -> Doc
 angles doc = char '<' <> doc <> char '>'

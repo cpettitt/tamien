@@ -73,7 +73,7 @@ pAlts :: Parser [CoreAlt]
 pAlts = sepBy1 pAlt semi 
 
 pAlt :: Parser CoreAlt
-pAlt = Alt <$> angles (natural) <*> many identifier <*> (arrow *> pExpr)
+pAlt = Alt <$> angles natural <*> many identifier <*> (arrow *> pExpr)
 
 pAExpr :: Parser CoreExpr
 pAExpr = choice [ pVar
@@ -117,7 +117,7 @@ lexerDef
         }
 
 isKeyword :: String -> Bool
-isKeyword =  (`elem` (PT.reservedNames lexerDef))
+isKeyword =  (`elem` PT.reservedNames lexerDef)
 
 angles     = PT.angles lexer
 arrow      = symbol "->"
