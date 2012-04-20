@@ -7,10 +7,10 @@
 module Tamien.Core.ParserTest where
 
 import Tamien.Core
+import Tamien.TestUtil
 
 import Control.Applicative ((<$>), (<*>))
 import Test.QuickCheck
-import Text.Printf
 
 varStart = ('_':['a'..'z'])
 varChar  = varStart ++ ['0'..'9']
@@ -35,8 +35,6 @@ instance Arbitrary CoreExpr where
 
 instance Arbitrary CoreAlt where
     arbitrary = Alt <$> number <*> resize 5 (listOf identifier) <*> arbitrary
-
-check s a = printf "%-25s: " s >> quickCheck a
 
 prop_printParse (NonEmpty prog)
     = case parse (printProgram prog) of
