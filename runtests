@@ -1,6 +1,6 @@
 #!/bin/sh
 
-for t in "Tamien.Core.ParserTest";
+for t in `find . -name *Test.hs`;
 do
     echo "Running tests in $t"
     runhaskell $t
