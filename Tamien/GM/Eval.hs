@@ -41,9 +41,16 @@ pushGlobal f state = state { gmStack = a : gmStack state }
           err = error $ "Undeclared global: " ++ f
 
 pushInt :: Int -> GmState -> GmState
-pushInt n state = state { gmStack = stack', gmHeap = heap' }
-    where (a, heap') = H.alloc (NNum n) (gmHeap state)
-          stack'     = a : gmStack state
+pushInt n state
+    = case M.lookup name (gmGlobals state) of 
+        Just a  -> state { gmStack = a : stack }
+        Nothing -> let (a, heap') = H.alloc (NNum n) heap
+                       globals'   = M.insert name a globals
+                   in state { gmStack = a : stack, gmHeap = heap', gmGlobals = globals' }
+    where name    = show n
+          heap    = gmHeap state
+          stack   = gmStack state
+          globals = gmGlobals state
 
 push :: Int -> GmState -> GmState
 push n state = state { gmStack = a : gmStack state }
