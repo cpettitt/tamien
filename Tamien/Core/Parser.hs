@@ -4,6 +4,7 @@
 
 module Tamien.Core.Parser
     ( parse
+    , parse'
     , parseExpr
     , isKeyword
     ) where
@@ -19,8 +20,13 @@ import qualified Text.Parsec.Token as PT
 
 -- PARSER
 
-parse:: String -> Either String CoreProgram
+parse :: String -> Either String CoreProgram
 parse = runParser pProgram
+
+parse' :: String -> CoreProgram
+parse' str = case runParser pProgram str of
+                Left err -> error err
+                Right x  -> x
 
 parseExpr :: String -> Either String CoreExpr
 parseExpr = runParser pExpr
