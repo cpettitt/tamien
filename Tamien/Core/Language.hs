@@ -75,3 +75,21 @@ type CoreScDefn = ScDefn Name
 -- | A program is composed of supercombinator definitions
 type Program a = [ScDefn a]
 type CoreProgram = Program Name
+
+preludeDefs :: CoreProgram
+preludeDefs
+    = [ ScDefn "I"       ["x"]           (Var "x")
+      , ScDefn "K"       ["x", "y"]      (Var "x")
+      , ScDefn "K1"      ["x", "y"]      (Var "y")
+      , ScDefn "S"       ["f", "g", "x"]
+            (App (App (Var "f") (Var "x"))
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "compose" ["f", "g", "x"]
+            (App (Var "f")
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "twice"   ["f"]
+            (App (App (Var "compose") (Var "f"))
+                 (Var "f"))
+      ]
