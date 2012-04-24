@@ -30,7 +30,7 @@ data Node = NApp Addr Addr
 -- TODO consider patricia tree
 type TiGlobals = Map Name Addr
 
-data TiStats = TiStats Int
+data TiStats = TiStats Int Int Int
 
 trace :: String -> String
 trace = showResults . eval . compile . parse'
@@ -48,10 +48,10 @@ getResult _ = error "More than one stack element remains!"
 compile :: CoreProgram -> TiState
 compile prog
     = TiState { tiStack   = stack
-              , tiDump    = initialTiDump
+              , tiDump    = initialDump
               , tiHeap    = heap
               , tiGlobals = globals
-              , tiStats   = initialTiStats
+              , tiStats   = initialStats
               }
     where
         sc_defs         = prog ++ preludeDefs ++ extraPreludeDefs
@@ -68,17 +68,20 @@ step :: TiState -> TiState
 step state = dispatch (H.lookup (head $ tiStack state) (tiHeap state))
     where
         dispatch (NNum n)        = numStep state n
-        dispatch (NApp a1 a2)    = apStep state a1 a2
+        dispatch (NApp a1 a2)    = appStep state a1 a2
         dispatch (NSc sc args e) = scStep state sc args e
 
 numStep :: TiState -> Int -> TiState
 numStep state n = error "Number applied as a function!"
 
-apStep :: TiState -> Addr -> Addr -> TiState
-apStep state a1 a2 = state { tiStack = a1 : tiStack state }
+appStep :: TiState -> Addr -> Addr -> TiState
+appStep state a1 a2 = state { tiStack = a1 : tiStack state }
 
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
-scStep state sc args e = state { tiStack = stack', tiHeap = heap' }
+scStep state sc args e
+    | length args /= length bindings
+        = error $ "Application of '" ++ sc ++ "' with too few arguments"
+    | otherwise = state { tiStack = stack', tiHeap = heap' }
     where
         stack      = tiStack state
         heap       = tiHeap state
@@ -106,7 +109,13 @@ instantiate (Let isrec defs e) heap env = error "Let(rec) unsupported"
 instantiate (Case e alts) heap env = error "Case unsupported"
 
 doAdmin :: TiState -> TiState
-doAdmin = applyToTiStats incrTiStatSteps
+doAdmin state = state { tiStats = stats' }
+    where stack  = tiStack state
+          heap   = tiHeap state
+          stats' = TiStats (steps + 1)
+                           (max max_stack (length stack)) 
+                           (max max_heap (H.size heap))
+          (TiStats steps max_stack max_heap) = tiStats state
 
 tiFinal :: TiState -> Bool
 tiFinal TiState {tiStack = [addr], tiHeap = heap} = isDataNode (H.lookup addr heap)
@@ -117,20 +126,20 @@ isDataNode :: Node -> Bool
 isDataNode (NNum n) = True
 isDataNode _        = False
 
-initialTiDump :: TiDump
-initialTiDump = DummyTiDump
+initialDump :: TiDump
+initialDump = DummyTiDump
 
-initialTiStats :: TiStats
-initialTiStats = TiStats 0
+initialStats :: TiStats
+initialStats = TiStats 0 0 0
 
-incrTiStatSteps :: TiStats -> TiStats
-incrTiStatSteps = TiStats . (+ 1) . getTiStatSteps
+getStatSteps :: TiStats -> Int
+getStatSteps (TiStats x _ _) = x
 
-getTiStatSteps :: TiStats -> Int
-getTiStatSteps (TiStats n) = n
+getStatMaxStack :: TiStats -> Int
+getStatMaxStack (TiStats _ x _) = x
 
-applyToTiStats :: (TiStats -> TiStats) -> TiState -> TiState
-applyToTiStats f state = state { tiStats = f (tiStats state) }
+getStatMaxHeap :: TiStats -> Int
+getStatMaxHeap (TiStats _ _ x) = x
 
 buildInitialHeap :: CoreProgram -> (TiHeap, TiGlobals)
 buildInitialHeap = foldl' (uncurry allocSc) (H.empty, M.empty)
@@ -153,12 +162,14 @@ lookupGlobal n = M.findWithDefault err n
 
 showResults :: [TiState] -> String
 showResults states
-    = render $ vcat (map showState states) $+$
+    = render $ vcat (zipWith showState [0..] states) $+$
+               text "" $+$
                showStats (last states)
     where s = head states
 
-showState :: TiState -> Doc
-showState state = nest 4 $ showStack state
+showState :: Int -> TiState -> Doc
+showState n state = text "Step" <+> int n <+> text ":" $+$
+                    nest 4 (showStack state)
 
 showStack :: TiState -> Doc
 showStack s
@@ -176,8 +187,11 @@ showNode s a (NApp a1 a2)   = text "NApp" <+> showAddr a1 <+> showAddr a2
 showNode s a (NSc name _ _) = text "NSc" <+> text name
 
 showStats :: TiState -> Doc
-showStats s = text "Steps taken =" <+> int (getTiStatSteps (tiStats s))
+showStats s = text "Steps taken     =" <+> int (getStatSteps stats) $+$
+              text "Max stack depth =" <+> int (getStatMaxStack stats) $+$
+              text "Max heap size   =" <+> int (getStatMaxHeap stats)
+    where stats = tiStats s
 
 showAddr :: Addr -> Doc
-showAddr a = text (take (5 - length str) (repeat ' ')) <> text str
+showAddr a = text (replicate (5 - length str) ' ') <> text str
     where str = show a
