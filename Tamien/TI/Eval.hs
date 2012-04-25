@@ -4,9 +4,8 @@ import Tamien.Core
 import qualified Tamien.Heap as H
 import Tamien.Heap (Addr, Heap)
 
-import Data.List (foldl')
-import qualified Data.Map as M
-import Data.Map (Map)
+import Data.List (mapAccumL)
+import Data.Maybe (fromMaybe)
 import Text.PrettyPrint
 
 data TiState = TiState
@@ -28,15 +27,18 @@ data Node = NApp Addr Addr
           | NNum Int
 
 -- TODO consider patricia tree
-type TiGlobals = Map Name Addr
+type TiGlobals = [(Name, Addr)]
 
 data TiStats = TiStats Int Int Int
 
-trace :: String -> String
-trace = showResults . eval . compile . parse'
+showTrace :: String -> String
+showTrace = showResults . trace
+
+trace :: String -> [TiState]
+trace = eval . compile . parse'
 
 run :: String -> Int
-run = getResult . last . eval . compile . parse'
+run = getResult . last . trace
 
 getResult :: TiState -> Int
 getResult TiState { tiStack = [addr], tiHeap = heap }
@@ -72,10 +74,10 @@ step state = dispatch (H.lookup (head $ tiStack state) (tiHeap state))
         dispatch (NSc sc args e) = scStep state sc args e
 
 numStep :: TiState -> Int -> TiState
-numStep state n = error "Number applied as a function!"
+numStep _ _ = error "Number applied as a function!"
 
 appStep :: TiState -> Addr -> Addr -> TiState
-appStep state a1 a2 = state { tiStack = a1 : tiStack state }
+appStep state a1 _ = state { tiStack = a1 : tiStack state }
 
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep state sc args e
@@ -87,26 +89,36 @@ scStep state sc args e
         heap       = tiHeap state
         stack'     = a : drop (length args + 1) stack
         (a, heap') = instantiate e heap env
-        env        = M.fromList bindings `M.union` tiGlobals state
+        env        = bindings ++ tiGlobals state
         bindings   = zip args (getArgs heap stack)
 
 -- drops first stack element, which is the supercombinator
 getArgs :: TiHeap -> TiStack -> [Addr]
 getArgs heap = map getArg . tail
     where getArg addr = arg
-            where (NApp fun arg) = H.lookup addr heap
+            where (NApp _ arg) = H.lookup addr heap
 
-instantiate :: CoreExpr -> TiHeap -> M.Map Name Addr -> (Addr, TiHeap)
-instantiate (Num n) heap env = H.alloc (NNum n) heap
-instantiate (Var v) heap env = (M.findWithDefault err v env, heap)
+instantiate :: CoreExpr -> TiHeap -> TiGlobals -> (Addr, TiHeap)
+instantiate (Num n) heap _   = H.alloc (NNum n) heap
+instantiate (Var v) heap env = (fromMaybe err (lookup v env), heap)
     where err = error $ "Undefined name: " ++ show v
 instantiate (App e1 e2) heap env
     = H.alloc (NApp a1 a2) heap2
     where (a1, heap1) = instantiate e1 heap  env
           (a2, heap2) = instantiate e2 heap1 env
 instantiate (Constr tag arity) heap env = error "Constr unsupported"
-instantiate (Let isrec defs e) heap env = error "Let(rec) unsupported"
+instantiate (Let isRec defs e) heap env = instantiate e heap' env'
+    where (heap', env') = instantiateDefs isRec defs heap env
 instantiate (Case e alts) heap env = error "Case unsupported"
+
+instantiateDefs :: IsRec -> [(Name, CoreExpr)] -> TiHeap -> TiGlobals -> (TiHeap, TiGlobals)
+instantiateDefs isRec defs heap env = (heap', env')
+    where env' = zip (map fst defs) addrs ++ env
+          (addrs, heap')  = go defs ([], heap) (if isRec then env' else env)
+          go []             (as, h) _ = (reverse as, h)
+          go ((_, expr):xs) (as, h) e
+            = let (a, h') = instantiate expr h e
+              in go xs (a:as, h') e
 
 doAdmin :: TiState -> TiState
 doAdmin state = state { tiStats = stats' }
@@ -123,7 +135,7 @@ tiFinal TiState {tiStack = []} = error "Empty stack!"
 tiFinal _                      = False
 
 isDataNode :: Node -> Bool
-isDataNode (NNum n) = True
+isDataNode (NNum _) = True
 isDataNode _        = False
 
 initialDump :: TiDump
@@ -142,19 +154,18 @@ getStatMaxHeap :: TiStats -> Int
 getStatMaxHeap (TiStats _ _ x) = x
 
 buildInitialHeap :: CoreProgram -> (TiHeap, TiGlobals)
-buildInitialHeap = foldl' (uncurry allocSc) (H.empty, M.empty)
+buildInitialHeap = mapAccumL allocSc H.empty
 
-allocSc :: TiHeap -> TiGlobals -> CoreScDefn -> (TiHeap, TiGlobals)
-allocSc heap globals (ScDefn name args body) = (heap', globals')
+allocSc :: TiHeap -> CoreScDefn -> (TiHeap, (Name, Addr))
+allocSc heap (ScDefn name args body) = (heap', (name, addr))
     where
         (addr, heap') = H.alloc (NSc name args body) heap
-        globals'      = M.insert name addr globals
 
 extraPreludeDefs :: CoreProgram
 extraPreludeDefs = []
 
 lookupGlobal :: Name -> TiGlobals -> Addr
-lookupGlobal n = M.findWithDefault err n
+lookupGlobal n = fromMaybe err . lookup n
     where err = error $ "Global " ++ n ++ " is not defined"
 
 
@@ -165,7 +176,6 @@ showResults states
     = render $ vcat (zipWith showState [0..] states) $+$
                text "" $+$
                showStats (last states)
-    where s = head states
 
 showState :: Int -> TiState -> Doc
 showState n state = text "Step" <+> int n <+> text ":" $+$
@@ -182,9 +192,9 @@ showStackItem :: TiState -> Addr -> Doc
 showStackItem s a = showAddr a <> text ":" <+> showNode s a (H.lookup a (tiHeap s))
 
 showNode :: TiState -> Addr -> Node -> Doc
-showNode s a (NNum n)       = text "NNum" <+> int n
-showNode s a (NApp a1 a2)   = text "NApp" <+> showAddr a1 <+> showAddr a2
-showNode s a (NSc name _ _) = text "NSc" <+> text name
+showNode _ _ (NNum n)       = text "NNum" <+> int n
+showNode _ _ (NApp a1 a2)   = text "NApp" <+> showAddr a1 <+> showAddr a2
+showNode _ _ (NSc name _ _) = text "NSc" <+> text name
 
 showStats :: TiState -> Doc
 showStats s = text "Steps taken     =" <+> int (getStatSteps stats) $+$

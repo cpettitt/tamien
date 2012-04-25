@@ -11,8 +11,11 @@ Build-type:          Simple
 Cabal-version:       >=1.2
 
 Library
+  Ghc-options:         -W
   Exposed-modules:     Tamien.Core,
                        Tamien.Core.Language,
                        Tamien.Core.Parser,
                        Tamien.Core.Printer
-  Build-depends:       base, parsec, pretty
+                       Tamien.TI,
+                       Tamien.TI.Eval
+  Build-depends:       base, parsec, pretty, containers
