@@ -33,6 +33,7 @@ empty :: Heap a
 empty = Heap [1..] M.empty
 
 alloc :: a -> Heap a -> (Addr, Heap a)
+alloc _ (Heap [] _) = error "Out of heap ids to assign!"
 alloc v (Heap (next:free) assigned)
     = (Addr next, Heap free (M.insert next v assigned))
 

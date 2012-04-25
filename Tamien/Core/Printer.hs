@@ -35,7 +35,7 @@ docExpr (Let isrec defns expr)
         $+$ text "in" <+> docExpr expr
     where 
         isrecstr | isrec     = "letrec"
-                 | not isrec = "let"
+                 | otherwise = "let"
 docExpr (Case e as)
     = text "case" <+> docExpr e <+> text "of" <+> char '{' $+$ nest 4 (docAlts as) $+$ char '}'
 docExpr (Lam vs e)
