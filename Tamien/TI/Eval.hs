@@ -25,6 +25,7 @@ type TiHeap = Heap Node
 data Node = NApp Addr Addr
           | NSc Name [Name] CoreExpr
           | NNum Int
+          | NIndir Addr
 
 -- TODO consider patricia tree
 type TiGlobals = [(Name, Addr)]
@@ -72,6 +73,7 @@ step state = dispatch (H.lookup (head $ tiStack state) (tiHeap state))
         dispatch (NNum n)        = numStep state n
         dispatch (NApp a1 a2)    = appStep state a1 a2
         dispatch (NSc sc args e) = scStep state sc args e
+        dispatch (NIndir a)     = indirStep state a
 
 numStep :: TiState -> Int -> TiState
 numStep _ _ = error "Number applied as a function!"
@@ -83,14 +85,18 @@ scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep state sc args e
     | length args /= length bindings
         = error $ "Application of '" ++ sc ++ "' with too few arguments"
-    | otherwise = state { tiStack = stack', tiHeap = heap' }
+    | otherwise = state { tiStack = stack', tiHeap = heap2 }
     where
         stack      = tiStack state
         heap       = tiHeap state
         stack'     = a : drop (length args + 1) stack
-        (a, heap') = instantiate e heap env
+        heap2      = H.update (stack !! length args) (NIndir a) heap1
+        (a, heap1) = instantiate e heap env
         env        = bindings ++ tiGlobals state
         bindings   = zip args (getArgs heap stack)
+
+indirStep :: TiState -> Addr -> TiState
+indirStep state a = state { tiStack = a : tail (tiStack state) }
 
 -- drops first stack element, which is the supercombinator
 getArgs :: TiHeap -> TiStack -> [Addr]
@@ -195,6 +201,7 @@ showNode :: TiState -> Addr -> Node -> Doc
 showNode _ _ (NNum n)       = text "NNum" <+> int n
 showNode _ _ (NApp a1 a2)   = text "NApp" <+> showAddr a1 <+> showAddr a2
 showNode _ _ (NSc name _ _) = text "NSc" <+> text name
+showNode _ _ (NIndir a)     = text "NIndir" <+> showAddr a
 
 showStats :: TiState -> Doc
 showStats s = text "Steps taken     =" <+> int (getStatSteps stats) $+$
