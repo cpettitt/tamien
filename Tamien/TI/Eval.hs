@@ -27,6 +27,7 @@ data Node = NApp Addr Addr
           | NNum Int
           | NIndir Addr
           | NPrim Name Primitive
+    deriving Show
 
 -- TODO consider patricia tree
 type TiGlobals = [(Name, Addr)]
@@ -114,6 +115,10 @@ indirStep state a = state { tiStack = a : tail (tiStack state) }
 
 primStep :: TiState -> Name -> Primitive -> TiState
 primStep state n Neg = primNeg state n
+primStep state n Add = primArith state n (+)
+primStep state n Sub = primArith state n (-)
+primStep state n Mul = primArith state n (*)
+primStep state n Div = primArith state n (div)
 
 primNeg :: TiState -> Name -> TiState
 primNeg state name
@@ -131,6 +136,27 @@ primNeg state name
         (NNum n) = arg
         heap     = tiHeap state
         stack    = tiStack state
+
+primArith state name op
+    | length stack > 3 = error $ "Type error: more than two arguments to primitive '" ++ name ++ "'"
+    | length stack < 3 = error $ "Application of primitive '" ++ name ++ "' with too few arguments"
+    | not (isDataNode a1) = state { tiStack = [a1_addr]
+                                  , tiDump = drop 1 stack : tiDump state
+                                  }
+    | not (isDataNode a2) = state { tiStack = [a2_addr]
+                                  , tiDump = [stack !! 2] : tiDump state
+                                  }
+    | otherwise
+        = state { tiStack = drop 2 stack, tiHeap = H.update (stack !! 2) (NNum (op n1 n2)) heap }
+    where a1_addr   = head args
+          a2_addr   = args !! 1
+          a1        = H.lookup a1_addr heap
+          a2        = H.lookup a2_addr heap
+          (NNum n1) = a1
+          (NNum n2) = a2
+          args      = getArgs heap stack
+          heap      = tiHeap state
+          stack     = tiStack state
 
 -- drops first stack element, which is the supercombinator
 getArgs :: TiHeap -> TiStack -> [Addr]

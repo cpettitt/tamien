@@ -31,6 +31,22 @@ testNegateIndir = assertProgEq (-3) "main = negate (I 3)"
 
 testNegateTwice = assertProgEq 3 "main = twice negate 3"
 
+testAdd = assertProgEq 9 "main = + 6 3"
+
+testSub = assertProgEq 3 "main = - 6 3"
+
+testMul = assertProgEq 18 "main = * 6 3"
+
+testDiv = assertProgEq 2 "main = / 6 3"
+
+testDivTruncation = assertProgEq 2 "main = / 7 3"
+
+testPrimArithIndir = assertProgEq 26 "main = + (* 6 3) 8"
+
+testPrimArithIndir2 = assertProgEq 26 "main = + 8 (* 6 3)"
+
+testPrimArithIndir3 = assertProgEq 26 "main = + (* 6 3) (I 8)"
+
 tests = TestList $
             map TestCase
                 [ testId
@@ -41,6 +57,14 @@ tests = TestList $
                 , testNegate
                 , testNegateIndir
                 , testNegateTwice
+                , testAdd
+                , testSub
+                , testMul
+                , testDiv
+                , testDivTruncation
+                , testPrimArithIndir
+                , testPrimArithIndir2
+                , testPrimArithIndir3
                 ]
 
 main = runTestTT tests
