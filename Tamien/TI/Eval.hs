@@ -73,7 +73,7 @@ step state = dispatch (H.lookup (head $ tiStack state) (tiHeap state))
         dispatch (NNum n)        = numStep state n
         dispatch (NApp a1 a2)    = appStep state a1 a2
         dispatch (NSc sc args e) = scStep state sc args e
-        dispatch (NIndir a)     = indirStep state a
+        dispatch (NIndir a)      = indirStep state a
 
 numStep :: TiState -> Int -> TiState
 numStep _ _ = error "Number applied as a function!"
@@ -85,13 +85,12 @@ scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep state sc args e
     | length args /= length bindings
         = error $ "Application of '" ++ sc ++ "' with too few arguments"
-    | otherwise = state { tiStack = stack', tiHeap = heap2 }
+    | otherwise = state { tiStack = stack', tiHeap = heap' }
     where
         stack      = tiStack state
         heap       = tiHeap state
-        stack'     = a : drop (length args + 1) stack
-        heap2      = H.update (stack !! length args) (NIndir a) heap1
-        (a, heap1) = instantiate e heap env
+        stack'     = drop (length args) stack
+        heap'      = instantiateAndUpdate e (stack !! length args) heap env
         env        = bindings ++ tiGlobals state
         bindings   = zip args (getArgs heap stack)
 
@@ -116,6 +115,20 @@ instantiate (Constr tag arity) heap env = error "Constr unsupported"
 instantiate (Let isRec defs e) heap env = instantiate e heap' env'
     where (heap', env') = instantiateDefs isRec defs heap env
 instantiate (Case e alts) heap env = error "Case unsupported"
+
+instantiateAndUpdate :: CoreExpr -> Addr -> TiHeap -> TiGlobals -> TiHeap
+instantiateAndUpdate (Num n) addr heap _ = H.update addr (NNum n) heap
+instantiateAndUpdate (Var v) addr heap env
+    = H.update addr (NIndir (fromMaybe err (lookup v env))) heap
+    where err = error $ "Undefined name: " ++ show v
+instantiateAndUpdate (App e1 e2) addr heap env
+    = H.update addr (NApp a1 a2) heap2
+    where (a1, heap1) = instantiate e1 heap env
+          (a2, heap2) = instantiate e2 heap1 env
+instantiateAndUpdate (Constr tag arity) addr heap env = error "Cosntr unsupported"
+instantiateAndUpdate (Let isRec defs e) addr heap env = instantiateAndUpdate e addr heap' env'
+    where (heap', env') = instantiateDefs isRec defs heap env
+instnatiateAndUpdate (Case e alts) addr heap env = error "Case unsupported"
 
 instantiateDefs :: IsRec -> [(Name, CoreExpr)] -> TiHeap -> TiGlobals -> (TiHeap, TiGlobals)
 instantiateDefs isRec defs heap env = (heap', env')
