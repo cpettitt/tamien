@@ -18,7 +18,7 @@ data TiState = TiState
 
 type TiStack = [Addr]
 
-data TiDump = DummyTiDump
+type TiDump = [TiStack]
 
 type TiHeap = Heap Node
 
@@ -26,11 +26,15 @@ data Node = NApp Addr Addr
           | NSc Name [Name] CoreExpr
           | NNum Int
           | NIndir Addr
+          | NPrim Name Primitive
 
 -- TODO consider patricia tree
 type TiGlobals = [(Name, Addr)]
 
 data TiStats = TiStats Int Int Int
+
+data Primitive = Neg | Add | Sub | Mul | Div
+    deriving Show
 
 showTrace :: String -> String
 showTrace = showResults . trace
@@ -74,12 +78,23 @@ step state = dispatch (H.lookup (head $ tiStack state) (tiHeap state))
         dispatch (NApp a1 a2)    = appStep state a1 a2
         dispatch (NSc sc args e) = scStep state sc args e
         dispatch (NIndir a)      = indirStep state a
+        dispatch (NPrim n p)     = primStep state n p
 
 numStep :: TiState -> Int -> TiState
-numStep _ _ = error "Number applied as a function!"
+numStep state n
+    | length stack == 1 && not (null dump)
+        = state { tiStack = head dump, tiDump = tail dump }
+    where stack = tiStack state
+          dump  = tiDump state
+numStep _ _     = error "Number applied as a function!"
 
 appStep :: TiState -> Addr -> Addr -> TiState
-appStep state a1 _ = state { tiStack = a1 : tiStack state }
+appStep state a1 a2
+    = case H.lookup a2 heap of
+        (NIndir a3) -> state { tiHeap = H.update (head stack) (NApp a1 a3) heap }
+        _           -> state { tiStack = a1 : stack }
+    where heap  = tiHeap state
+          stack = tiStack state
 
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep state sc args e
@@ -96,6 +111,26 @@ scStep state sc args e
 
 indirStep :: TiState -> Addr -> TiState
 indirStep state a = state { tiStack = a : tail (tiStack state) }
+
+primStep :: TiState -> Name -> Primitive -> TiState
+primStep state n Neg = primNeg state n
+
+primNeg :: TiState -> Name -> TiState
+primNeg state name
+    | length stack > 2 = error $ "Type error: more than one argument to primitive '" ++ name ++ "'"
+    | length stack < 2 = error $ "Application of primitive '" ++ name ++ "' with too few arguments"
+    | isDataNode arg = state { tiStack = drop 1 stack
+                             , tiHeap = H.update (stack !! 1) (NNum (-n)) heap
+                             }
+    | otherwise = state { tiStack = [arg_addr]
+                        , tiDump  = [stack !! 1] : tiDump state
+                        }
+    where
+        arg_addr = head $ getArgs heap stack
+        arg      = H.lookup arg_addr heap
+        (NNum n) = arg
+        heap     = tiHeap state
+        stack    = tiStack state
 
 -- drops first stack element, which is the supercombinator
 getArgs :: TiHeap -> TiStack -> [Addr]
@@ -149,7 +184,8 @@ doAdmin state = state { tiStats = stats' }
           (TiStats steps max_stack max_heap) = tiStats state
 
 tiFinal :: TiState -> Bool
-tiFinal TiState {tiStack = [addr], tiHeap = heap} = isDataNode (H.lookup addr heap)
+tiFinal TiState {tiStack = [addr], tiDump = [], tiHeap = heap}
+    = isDataNode (H.lookup addr heap)
 tiFinal TiState {tiStack = []} = error "Empty stack!"
 tiFinal _                      = False
 
@@ -158,7 +194,7 @@ isDataNode (NNum _) = True
 isDataNode _        = False
 
 initialDump :: TiDump
-initialDump = DummyTiDump
+initialDump = []
 
 initialStats :: TiStats
 initialStats = TiStats 0 0 0
@@ -173,12 +209,24 @@ getStatMaxHeap :: TiStats -> Int
 getStatMaxHeap (TiStats _ _ x) = x
 
 buildInitialHeap :: CoreProgram -> (TiHeap, TiGlobals)
-buildInitialHeap = mapAccumL allocSc H.empty
+buildInitialHeap scs = (heap2, sc_addrs ++ prim_addrs)
+    where (heap1, sc_addrs)   = mapAccumL allocSc H.empty scs
+          (heap2, prim_addrs) = mapAccumL allocPrim heap1 primitives
+
+primitives :: [(Name, Primitive)]
+primitives = [ ("negate", Neg)
+             , ("+", Add)
+             , ("-", Sub)
+             , ("*", Mul)
+             , ("/", Div) ]
 
 allocSc :: TiHeap -> CoreScDefn -> (TiHeap, (Name, Addr))
 allocSc heap (ScDefn name args body) = (heap', (name, addr))
-    where
-        (addr, heap') = H.alloc (NSc name args body) heap
+    where (addr, heap') = H.alloc (NSc name args body) heap
+
+allocPrim :: TiHeap -> (Name, Primitive) -> (TiHeap, (Name, Addr))
+allocPrim heap (name, prim) = (heap', (name, addr))
+    where (addr, heap') = H.alloc (NPrim name prim) heap
 
 extraPreludeDefs :: CoreProgram
 extraPreludeDefs = []
@@ -215,6 +263,7 @@ showNode _ _ (NNum n)       = text "NNum" <+> int n
 showNode _ _ (NApp a1 a2)   = text "NApp" <+> showAddr a1 <+> showAddr a2
 showNode _ _ (NSc name _ _) = text "NSc" <+> text name
 showNode _ _ (NIndir a)     = text "NIndir" <+> showAddr a
+showNode _ _ (NPrim n prim) = text "NPrim" <+> text n <+> text (show prim)
 
 showStats :: TiState -> Doc
 showStats s = text "Steps taken     =" <+> int (getStatSteps stats) $+$

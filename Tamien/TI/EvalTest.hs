@@ -25,6 +25,12 @@ testLetRec = assertProgEq 4
                           \    in fst (snd (snd (snd a))); \
                           \main = f 3 4"
 
+testNegate = assertProgEq (-3) "main = negate 3"
+
+testNegateIndir = assertProgEq (-3) "main = negate (I 3)"
+
+testNegateTwice = assertProgEq 3 "main = twice negate 3"
+
 tests = TestList $
             map TestCase
                 [ testId
@@ -32,6 +38,9 @@ tests = TestList $
                 , testId3
                 , testLet
                 , testLetRec
+                , testNegate
+                , testNegateIndir
+                , testNegateTwice
                 ]
 
 main = runTestTT tests
