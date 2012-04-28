@@ -89,7 +89,7 @@ pAExpr = choice [ pVar
                     ]
 
 pVar :: Parser CoreExpr
-pVar = Var <$> identifier
+pVar = Var <$> identifier <|> Var <$> operator
 
 -- TODO overflow check
 pNum :: Parser CoreExpr
@@ -138,3 +138,4 @@ reserved   = PT.reserved lexer
 semi       = PT.semi lexer
 semiSep1   = PT.semiSep1 lexer
 symbol     = PT.symbol lexer
+operator   = PT.operator lexer
