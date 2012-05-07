@@ -4,7 +4,7 @@ import Tamien.Core
 import qualified Tamien.Heap as H
 import Tamien.Heap (Addr, Heap)
 
-import Data.List (mapAccumL)
+import Data.List (foldl', mapAccumL)
 import Data.Maybe (fromMaybe)
 import Text.PrettyPrint
 
@@ -27,15 +27,19 @@ data Node = NApp Addr Addr
           | NNum Int
           | NIndir Addr
           | NPrim Name Primitive
+          | NMarkedNode Node
     deriving Show
 
 -- TODO consider patricia tree
 type TiGlobals = [(Name, Addr)]
 
-data TiStats = TiStats Int Int Int
+data TiStats = TiStats Int Int Int Int
 
 data Primitive = Neg | Add | Sub | Mul | Div
     deriving Show
+
+minGcHeapSize :: Int
+minGcHeapSize = 20
 
 showTrace :: String -> String
 showTrace = showResults . trace
@@ -201,13 +205,18 @@ instantiateDefs isRec defs heap env = (heap', env')
               in go xs (a:as, h') e
 
 doAdmin :: TiState -> TiState
-doAdmin state = state { tiStats = stats' }
-    where stack  = tiStack state
-          heap   = tiHeap state
-          stats' = TiStats (steps + 1)
-                           (max max_stack (length stack)) 
-                           (max max_heap (H.size heap))
-          (TiStats steps max_stack max_heap) = tiStats state
+doAdmin state = state2
+    where stack   = tiStack state
+          heap    = tiHeap state
+          need_gc = H.size heap > minGcHeapSize
+          stats'  = TiStats (steps + 1)
+                            (max max_stack (length stack)) 
+                            (max max_heap (H.size heap))
+                            (if need_gc then gcs + 1 else gcs)
+          (TiStats steps max_stack max_heap gcs) = tiStats state
+          state1 = state { tiStats = stats' }
+          state2 | need_gc   = gc state1
+                 | otherwise = state1
 
 tiFinal :: TiState -> Bool
 tiFinal TiState {tiStack = [addr], tiDump = [], tiHeap = heap}
@@ -223,16 +232,19 @@ initialDump :: TiDump
 initialDump = []
 
 initialStats :: TiStats
-initialStats = TiStats 0 0 0
+initialStats = TiStats 0 0 0 0
 
 getStatSteps :: TiStats -> Int
-getStatSteps (TiStats x _ _) = x
+getStatSteps (TiStats x _ _ _) = x
 
 getStatMaxStack :: TiStats -> Int
-getStatMaxStack (TiStats _ x _) = x
+getStatMaxStack (TiStats _ x _ _) = x
 
 getStatMaxHeap :: TiStats -> Int
-getStatMaxHeap (TiStats _ _ x) = x
+getStatMaxHeap (TiStats _ _ x _) = x
+
+getStatGcs :: TiStats -> Int
+getStatGcs (TiStats _ _ _ x) = x
 
 buildInitialHeap :: CoreProgram -> (TiHeap, TiGlobals)
 buildInitialHeap scs = (heap2, sc_addrs ++ prim_addrs)
@@ -261,6 +273,45 @@ lookupGlobal :: Name -> TiGlobals -> Addr
 lookupGlobal n = fromMaybe err . lookup n
     where err = error $ "Global " ++ n ++ " is not defined"
 
+-- GARBAGE COLLECTION
+
+gc :: TiState -> TiState
+gc state = state { tiHeap = heap' }
+    where heap  = tiHeap state
+          roots = findRoots state
+          heap' = scanHeap $ foldl' (flip markFrom) heap roots
+
+findRoots :: TiState -> [Addr]
+findRoots state
+    = stackRoots ++ dumpRoots ++ globalRoots
+    where stackRoots  = findStackRoots (tiStack state)
+          dumpRoots   = findDumpRoots (tiDump state)
+          globalRoots = findGlobalRoots (tiGlobals state)
+
+findStackRoots :: TiStack -> [Addr]
+findStackRoots = id
+
+findDumpRoots :: TiDump -> [Addr]
+findDumpRoots = concatMap findStackRoots
+
+findGlobalRoots :: TiGlobals -> [Addr]
+findGlobalRoots = map snd
+
+markFrom :: Addr -> TiHeap -> TiHeap
+markFrom a heap = go n
+    where
+        n                  = H.lookup a heap
+        heap'              = H.update a (NMarkedNode n) heap
+        go n@(NApp a1 a2)  = markFrom a1 $ markFrom a2 heap'
+        go n@(NIndir a1)   = markFrom a1 heap'
+        go (NMarkedNode _) = heap
+        go _               = heap'
+
+scanHeap :: TiHeap -> TiHeap
+scanHeap heap = foldl' go heap $ H.addresses heap
+    where go heap' a = case H.lookup a heap' of
+                            (NMarkedNode n) -> H.update a n heap'
+                            _               -> H.free a heap'
 
 -- PRETTY PRINTING RESULTS
 
@@ -294,7 +345,8 @@ showNode _ _ (NPrim n prim) = text "NPrim" <+> text n <+> text (show prim)
 showStats :: TiState -> Doc
 showStats s = text "Steps taken     =" <+> int (getStatSteps stats) $+$
               text "Max stack depth =" <+> int (getStatMaxStack stats) $+$
-              text "Max heap size   =" <+> int (getStatMaxHeap stats)
+              text "Max heap size   =" <+> int (getStatMaxHeap stats) $+$
+              text "Number of GCs   =" <+> int (getStatGcs stats)
     where stats = tiStats s
 
 showAddr :: Addr -> Doc
