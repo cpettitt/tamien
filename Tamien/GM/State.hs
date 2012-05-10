@@ -22,7 +22,8 @@ data Instruction
     | PushInt Int
     | Push Int
     | MkApp
-    | Slide Int
+    | Update Int
+    | Pop Int
     | Unwind
     deriving (Eq, Show)
 
@@ -34,6 +35,7 @@ data Node
     = NNum Int
     | NApp Addr Addr
     | NGlobal Int GmCode
+    | NIndir Addr
     deriving Show
 
 -- TODO candidate for a Patricia tree?

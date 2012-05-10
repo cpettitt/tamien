@@ -45,7 +45,8 @@ dispatch (PushGlobal f) = pushGlobal f
 dispatch (PushInt n)    = pushInt n
 dispatch (Push n)       = push n
 dispatch MkApp          = mkApp
-dispatch (Slide n)      = slide n
+dispatch (Update n)     = update n
+dispatch (Pop n)        = pop n
 dispatch Unwind         = unwind
 
 pushGlobal :: Name -> GmState -> GmState
@@ -75,9 +76,15 @@ mkApp state = state { gmStack = a:stack', gmHeap = heap' }
     where (a, heap')     = H.alloc (NApp a1 a2) (gmHeap state)
           (a1:a2:stack') = gmStack state
 
-slide :: Int -> GmState -> GmState
-slide n state = state { gmStack = a : drop n as }
-    where (a:as) = gmStack state
+update :: Int -> GmState -> GmState
+update n state = state { gmStack = stack', gmHeap = heap' }
+    where heap'  = H.update an (NIndir (head stack)) (gmHeap state)
+          stack' = tail stack
+          stack  = gmStack state
+          an     = stack !! (n + 1)
+
+pop :: Int -> GmState -> GmState
+pop n state = state { gmStack = drop n (gmStack state) }
 
 unwind :: GmState -> GmState
 unwind state = newState (H.lookup a (gmHeap state))
@@ -86,6 +93,7 @@ unwind state = newState (H.lookup a (gmHeap state))
           newState (NApp a1 a2)  = state { gmCode = [Unwind], gmStack = a1:a:as }
           newState (NGlobal n c) | length as < n = error "Unwinding with too few arguments"
                                  | otherwise     = state { gmCode = c }
+          newState (NIndir a1)   = state { gmCode = [Unwind], gmStack  = a1 : as }
 
 -- PRETTY PRINTING RESULTS
 
@@ -140,6 +148,7 @@ showNode s a (NNum n)      = int n
 showNode s a (NGlobal n g) = text "Global" <+> text v
     where v = head [ x | (x, b) <- M.assocs (gmGlobals s), a == b]
 showNode s a (NApp a1 a2)  = text "Ap" <+> text (show a1) <+> text (show a2)
+showNode s a (NIndir a1)   = text "NIndir" <+> text (show a1)
 
 showStats :: GmState -> Doc
 showStats s = text "Steps taken =" <+> int (statGetSteps (gmStats s))

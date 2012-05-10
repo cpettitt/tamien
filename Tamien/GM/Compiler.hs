@@ -62,7 +62,8 @@ compileSc (ScDefn name env body)
     = (name, length env, compileR body (M.fromList (zip env [0..])))
 
 compileR :: GmCompiler
-compileR e env = compileC e env ++ [Slide (M.size env + 1), Unwind]
+compileR e env = compileC e env ++ [Update n, Pop n, Unwind]
+    where n = M.size env
 
 compileC :: GmCompiler
 compileC (Num n) env = [PushInt n]
