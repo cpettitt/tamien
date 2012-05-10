@@ -55,7 +55,7 @@ pushGlobal f state = state { gmStack = a : gmStack state }
 
 pushInt :: Int -> GmState -> GmState
 pushInt n state
-    = case M.lookup name (gmGlobals state) of 
+    = case M.lookup name (gmGlobals state) of
         Just a  -> state { gmStack = a : stack }
         Nothing -> let (a, heap') = H.alloc (NNum n) heap
                        globals'   = M.insert name a globals
@@ -84,7 +84,7 @@ slide n state = state { gmStack = a : drop n as }
 unwind :: GmState -> GmState
 unwind state = newState (H.lookup a (gmHeap state))
     where (a:as) = gmStack state
-          newState (NNum n)      = state 
+          newState (NNum n)      = state
           newState (NApp a1 a2)  = state { gmCode = [Unwind], gmStack = a1:a:as }
           newState (NGlobal n c) | length as < n = error "Unwinding with too few arguments"
                                  | otherwise     = state { gmCode = c }
@@ -100,7 +100,7 @@ showResults states
              , text ""
              , text "State transitions"
              , text "================="
-             , vcat (map showState states) 
+             , vcat (zipWith showState [0..] states)
              , text ""
              , showStats (last states)
              ]
@@ -120,11 +120,12 @@ showInstructions code
            , text ""
            ]
 
-showState :: GmState -> Doc
-showState state = nest 4 $
-                    vcat [ showStack state
-                          , showInstructions (gmCode state) 
-                          ]
+showState :: Int -> GmState -> Doc
+showState n state = text "Step" <+> int n <+> text ":" $+$
+                    nest 4
+                      (vcat [ showStack state
+                            , showInstructions (gmCode state)
+                            ])
 
 showStack :: GmState -> Doc
 showStack s
