@@ -41,12 +41,13 @@ compile program = emptyState { gmCode    = initialCode
     where
         heap    = gmHeap emptyState
         globals = gmGlobals emptyState
-        sc_defs = program ++ preludeDefs
+        sc_defs = preludeDefs ++ program
         (heap', globals') = buildInitialHeap sc_defs heap globals
 
 initialCode :: [Instruction]
 initialCode = [PushGlobal "main", Unwind]
 
+-- TODO check for name collisions in the global namespace
 buildInitialHeap :: CoreProgram -> GmHeap -> GmGlobals -> (GmHeap, GmGlobals)
 buildInitialHeap program heap globals
     = foldl' step (heap, globals) (map compileSc program)
