@@ -9,8 +9,21 @@ import Tamien.Heap (Addr, Heap)
 import qualified Data.Map as M
 import Text.PrettyPrint
 
-run :: String -> String
-run = showResults . eval . compile . parse'
+showTrace :: String -> String
+showTrace = showResults . trace
+
+trace :: String -> [GmState]
+trace = eval . compile . parse'
+
+run :: String -> Int
+run = getResult . last . trace
+
+getResult :: GmState -> Int
+getResult GmState { gmStack = [addr], gmHeap = heap }
+    = case H.lookup addr heap of
+        (NNum n) -> n
+        _        -> error "Program not in a terminal state"
+getResult _ = error "More than one stack element remains"
 
 eval :: GmState -> [GmState]
 eval state = state : rest

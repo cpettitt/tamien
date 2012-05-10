@@ -38,6 +38,24 @@ data TiStats = TiStats Int Int Int Int
 data Primitive = Neg | Add | Sub | Mul | Div
     deriving Show
 
+preludeDefs :: CoreProgram
+preludeDefs
+    = [ ScDefn "I"       ["x"]           (Var "x")
+      , ScDefn "K"       ["x", "y"]      (Var "x")
+      , ScDefn "K1"      ["x", "y"]      (Var "y")
+      , ScDefn "S"       ["f", "g", "x"]
+            (App (App (Var "f") (Var "x"))
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "compose" ["f", "g", "x"]
+            (App (Var "f")
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "twice"   ["f"]
+            (App (App (Var "compose") (Var "f"))
+                 (Var "f"))
+      ]
+
 minGcHeapSize :: Int
 minGcHeapSize = 20
 

@@ -15,6 +15,24 @@ type GmCompiler = CoreExpr -> GmEnvironment -> GmCode
 
 type GmEnvironment = M.Map Name Int
 
+preludeDefs :: CoreProgram
+preludeDefs
+    = [ ScDefn "I"       ["x"]           (Var "x")
+      , ScDefn "K"       ["x", "y"]      (Var "x")
+      , ScDefn "K1"      ["x", "y"]      (Var "y")
+      , ScDefn "S"       ["f", "g", "x"]
+            (App (App (Var "f") (Var "x"))
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "compose" ["f", "g", "x"]
+            (App (Var "f")
+                 (App (Var "g") (Var "x")))
+
+      , ScDefn "twice"   ["f"]
+            (App (App (Var "compose") (Var "f"))
+                 (Var "f"))
+      ]
+
 compile :: CoreProgram -> GmState
 compile program = emptyState { gmCode    = initialCode
                              , gmHeap    = heap'
@@ -23,7 +41,8 @@ compile program = emptyState { gmCode    = initialCode
     where
         heap    = gmHeap emptyState
         globals = gmGlobals emptyState
-        (heap', globals') = buildInitialHeap program heap globals
+        sc_defs = program ++ preludeDefs
+        (heap', globals') = buildInitialHeap sc_defs heap globals
 
 initialCode :: [Instruction]
 initialCode = [PushGlobal "main", Unwind]
