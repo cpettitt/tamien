@@ -65,8 +65,9 @@ pushInt n state
           stack   = gmStack state
 
 push :: Int -> GmState -> GmState
-push n state = state { gmStack = a : gmStack state }
-    where a = getArg (H.lookup (gmStack state !! (n + 1)) (gmHeap state))
+push n state = state { gmStack = a : stack }
+    where a = stack !! n
+          stack = gmStack state
 
 getArg :: Node -> Addr
 getArg (NApp _ a) = a
@@ -91,9 +92,20 @@ unwind state = newState (H.lookup a (gmHeap state))
     where (a:as) = gmStack state
           newState (NNum n)      = state
           newState (NApp a1 a2)  = state { gmCode = [Unwind], gmStack = a1:a:as }
-          newState (NGlobal n c) | length as < n = error "Unwinding with too few arguments"
-                                 | otherwise     = state { gmCode = c }
+          newState (NGlobal n c)
+                | length as < n = error "Unwinding with too few arguments"
+                | otherwise     = state { gmCode = c
+                                        , gmStack = rearrangeStack n (gmHeap state) (gmStack state)
+                                        }
           newState (NIndir a1)   = state { gmCode = [Unwind], gmStack  = a1 : as }
+
+-- | Updates the stack such that the values of application nodes for a
+--   supercombinator replace the original application nodes. The root of the
+--   redex is left in place so that it can be updated.
+rearrangeStack :: Int -> GmHeap -> GmStack -> GmStack
+rearrangeStack n heap as
+    = take n as' ++ drop n as
+    where as' = map (getArg . (`H.lookup` heap)) (tail as)
 
 -- PRETTY PRINTING RESULTS
 
