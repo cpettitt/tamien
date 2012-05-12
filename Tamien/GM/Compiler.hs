@@ -33,6 +33,22 @@ preludeDefs
                  (Var "f"))
       ]
 
+compiledPrimitives :: [GmCompiledSc]
+compiledPrimitives
+    = [("+", 2, [Push 1, Eval, Push 1, Eval, Add, Update 2, Pop 2, Unwind])
+      ,("-", 2, [Push 1, Eval, Push 1, Eval, Sub, Update 2, Pop 2, Unwind])
+      ,("*", 2, [Push 1, Eval, Push 1, Eval, Mul, Update 2, Pop 2, Unwind])
+      ,("/", 2, [Push 1, Eval, Push 1, Eval, Div, Update 2, Pop 2, Unwind])
+      ,("negate", 1, [Push 0, Eval, Neg, Update 1, Pop 1, Unwind])
+      ,("==", 2, [Push 1, Eval, Push 1, Eval, Eq, Update 2, Pop 2, Unwind])
+      ,("/=", 2, [Push 1, Eval, Push 1, Eval, Ne, Update 2, Pop 2, Unwind])
+      ,("<", 2, [Push 1, Eval, Push 1, Eval, Lt, Update 2, Pop 2, Unwind])
+      ,("<=", 2, [Push 1, Eval, Push 1, Eval, Lte, Update 2, Pop 2, Unwind])
+      ,(">", 2, [Push 1, Eval, Push 1, Eval, Gt, Update 2, Pop 2, Unwind])
+      ,(">=", 2, [Push 1, Eval, Push 1, Eval, Gte, Update 2, Pop 2, Unwind])
+      ,("if", 3, [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
+      ]
+
 compile :: CoreProgram -> GmState
 compile program = emptyState { gmCode    = initialCode
                              , gmHeap    = heap'
@@ -45,12 +61,12 @@ compile program = emptyState { gmCode    = initialCode
         (heap', globals') = buildInitialHeap sc_defs heap globals
 
 initialCode :: [Instruction]
-initialCode = [PushGlobal "main", Unwind]
+initialCode = [PushGlobal "main", Eval]
 
 -- TODO check for name collisions in the global namespace
 buildInitialHeap :: CoreProgram -> GmHeap -> GmGlobals -> (GmHeap, GmGlobals)
 buildInitialHeap program heap globals
-    = foldl' step (heap, globals) (map compileSc program)
+    = foldl' step (heap, globals) (map compileSc program ++ compiledPrimitives)
     where step (h, g) x =  second (flip (uncurry M.insert) g) (allocSc h x)
 
 allocSc :: GmHeap -> GmCompiledSc -> (GmHeap, (Name, Addr))

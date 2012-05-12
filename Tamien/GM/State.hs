@@ -9,6 +9,7 @@ import qualified Data.Map as M
 data GmState = GmState
     { gmCode    :: GmCode
     , gmStack   :: GmStack
+    , gmDump    :: GmDump
     , gmHeap    :: GmHeap
     , gmGlobals :: GmGlobals
     , gmStats   :: GmStats
@@ -26,10 +27,18 @@ data Instruction
     | Pop Int
     | Alloc Int
     | Slide Int
+    | Eval
+    | Add | Sub | Mul | Div | Neg
+    | Eq | Ne | Lt | Lte | Gt | Gte
+    | Cond GmCode GmCode
     | Unwind
     deriving (Eq, Show)
 
 type GmStack = [Addr]
+
+type GmDump = [GmDumpItem]
+
+type GmDumpItem = (GmCode, GmStack)
 
 type GmHeap = Heap Node
 
@@ -47,7 +56,7 @@ newtype GmStats = GmStats Int
     deriving Show
 
 emptyState :: GmState
-emptyState = GmState [] [] H.empty M.empty initialStats
+emptyState = GmState [] [] [] H.empty M.empty initialStats
 
 initialStats :: GmStats
 initialStats = GmStats 0

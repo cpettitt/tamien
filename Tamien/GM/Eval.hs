@@ -10,6 +10,10 @@ import Data.List (foldl')
 import qualified Data.Map as M
 import Text.PrettyPrint
 
+type Box a = a -> GmState -> GmState
+
+type Unbox a = Addr -> GmState -> a
+
 showTrace :: String -> String
 showTrace = showResults . trace
 
@@ -42,23 +46,36 @@ step state = dispatch i (state { gmCode = is })
     where (i:is) = gmCode state
 
 dispatch :: Instruction -> GmState -> GmState
-dispatch (PushGlobal f) = pushGlobal f
-dispatch (PushInt n)    = pushInt n
-dispatch (Push n)       = push n
-dispatch MkApp          = mkApp
-dispatch (Update n)     = update n
-dispatch (Pop n)        = pop n
-dispatch (Alloc n)      = alloc n
-dispatch (Slide n)      = slide n
-dispatch Unwind         = unwind
+dispatch (PushGlobal f) = dispPushGlobal f
+dispatch (PushInt n)    = dispPushInt n
+dispatch (Push n)       = dispPush n
+dispatch MkApp          = dispMkApp
+dispatch (Update n)     = dispUpdate n
+dispatch (Pop n)        = dispPop n
+dispatch (Alloc n)      = dispAlloc n
+dispatch (Slide n)      = dispSlide n
+dispatch Eval           = dispEval
+dispatch Add            = arithmetic2 (+)
+dispatch Sub            = arithmetic2 (-)
+dispatch Mul            = arithmetic2 (*)
+dispatch Div            = arithmetic2 div
+dispatch Neg            = arithmetic1 negate
+dispatch Eq             = comparison (==)
+dispatch Ne             = comparison (/=)
+dispatch Lt             = comparison (<)
+dispatch Lte            = comparison (<=)
+dispatch Gt             = comparison (>)
+dispatch Gte            = comparison (>=)
+dispatch (Cond c1 c2)   = dispatchCond c1 c2
+dispatch Unwind         = dispUnwind
 
-pushGlobal :: Name -> GmState -> GmState
-pushGlobal f state = state { gmStack = a : gmStack state }
+dispPushGlobal :: Name -> GmState -> GmState
+dispPushGlobal f state = state { gmStack = a : gmStack state }
     where a   = M.findWithDefault err f (gmGlobals state)
           err = error $ "Undeclared global: " ++ f
 
-pushInt :: Int -> GmState -> GmState
-pushInt n state
+dispPushInt :: Int -> GmState -> GmState
+dispPushInt n state
     = case M.lookup name (gmGlobals state) of
         Just a  -> state { gmStack = a : stack }
         Nothing -> let (a, heap') = H.alloc (NNum n) (gmHeap state)
@@ -67,31 +84,31 @@ pushInt n state
     where name    = show n
           stack   = gmStack state
 
-push :: Int -> GmState -> GmState
-push n state = state { gmStack = a : stack }
+dispPush :: Int -> GmState -> GmState
+dispPush n state = state { gmStack = a : stack }
     where a = stack !! n
           stack = gmStack state
 
 getArg :: Node -> Addr
 getArg (NApp _ a) = a
 
-mkApp :: GmState -> GmState
-mkApp state = state { gmStack = a:stack', gmHeap = heap' }
+dispMkApp :: GmState -> GmState
+dispMkApp state = state { gmStack = a:stack', gmHeap = heap' }
     where (a, heap')     = H.alloc (NApp a1 a2) (gmHeap state)
           (a1:a2:stack') = gmStack state
 
-update :: Int -> GmState -> GmState
-update n state = state { gmStack = stack', gmHeap = heap' }
+dispUpdate :: Int -> GmState -> GmState
+dispUpdate n state = state { gmStack = stack', gmHeap = heap' }
     where heap'  = H.update an (NIndir (head stack)) (gmHeap state)
           stack' = tail stack
           stack  = gmStack state
           an     = stack !! (n + 1)
 
-pop :: Int -> GmState -> GmState
-pop n state = state { gmStack = drop n (gmStack state) }
+dispPop :: Int -> GmState -> GmState
+dispPop n state = state { gmStack = drop n (gmStack state) }
 
-alloc :: Int -> GmState -> GmState
-alloc n state
+dispAlloc :: Int -> GmState -> GmState
+dispAlloc n state
     = state { gmStack = stack'
             , gmHeap  = heap'
             }
@@ -99,14 +116,40 @@ alloc n state
           go (stack, heap) _ = (a : stack, heap2)
                 where (a, heap2) = H.alloc (NIndir H.nullAddr) heap
 
-slide :: Int -> GmState -> GmState
-slide n state = state { gmStack = a : drop n as }
+dispSlide :: Int -> GmState -> GmState
+dispSlide n state = state { gmStack = a : drop n as }
     where (a:as) = gmStack state
 
-unwind :: GmState -> GmState
-unwind state = newState (H.lookup a (gmHeap state))
+dispEval :: GmState -> GmState
+dispEval state
+    = state { gmCode  = [Unwind]
+            , gmStack = [head stack]
+            , gmDump  = (gmCode state, tail stack) : gmDump state
+            }
+    where stack = gmStack state
+
+dispatchCond :: GmCode -> GmCode -> GmState -> GmState
+dispatchCond trueBranch falseBranch state
+    = state { gmCode  = code ++ gmCode state
+            , gmStack = as
+            }
     where (a:as) = gmStack state
-          newState (NNum n)      = state
+          code = case H.lookup a (gmHeap state) of
+                    (NNum 1) -> trueBranch
+                    (NNum 0) -> falseBranch
+                    _        -> error "Boolean type error"
+dispUnwind :: GmState -> GmState
+dispUnwind state = newState (H.lookup a (gmHeap state))
+    where (a:as) = gmStack state
+          newState (NNum n)
+                | null dump = state
+                | otherwise
+                    = state { gmCode = code
+                            , gmStack = a : stack
+                            , gmDump = tail dump
+                            }
+                where dump = gmDump state
+                      (code, stack) = head dump
           newState (NApp a1 a2)  = state { gmCode = [Unwind], gmStack = a1:a:as }
           newState (NGlobal n c)
                 | length as < n = error "Unwinding with too few arguments"
@@ -117,11 +160,52 @@ unwind state = newState (H.lookup a (gmHeap state))
 
 -- | Updates the stack such that the values of application nodes for a
 --   supercombinator replace the original application nodes. The root of the
---   redex is left in place so that it can be updated.
+--   redex is left in place so that it can be update.
 rearrangeStack :: Int -> GmHeap -> GmStack -> GmStack
 rearrangeStack n heap as
     = take n as' ++ drop n as
     where as' = map (getArg . (`H.lookup` heap)) (tail as)
+
+boxInt :: Int -> GmState -> GmState
+boxInt n state
+    = state { gmStack = a : gmStack state
+            , gmHeap  = heap'
+            }
+    where (a, heap') = H.alloc (NNum n) (gmHeap state)
+
+unboxInt :: Addr -> GmState -> Int
+unboxInt a state
+    = case H.lookup a (gmHeap state) of
+        (NNum n) -> n
+        _        -> error "Unboxing a non-integer"
+
+boxBool :: Bool -> GmState -> GmState
+boxBool b state
+    = state { gmStack = a : gmStack state
+            , gmHeap  = heap'
+            }
+    where (a, heap') = H.alloc (NNum b') (gmHeap state)
+          b' | b         = 1
+             | otherwise = 0
+
+primitive1 :: Box b -> Unbox a -> (a -> b) -> GmState -> GmState
+primitive1 box unbox op state
+    = box (op (unbox a state)) (state { gmStack = as })
+    where (a:as) = gmStack state
+
+primitive2 :: Box b -> Unbox a -> (a -> a -> b) -> GmState -> GmState
+primitive2 box unbox op state
+    = box (op (unbox a1 state) (unbox a2 state)) (state { gmStack = as })
+    where (a1:a2:as) = gmStack state
+
+arithmetic1 :: (Int -> Int) -> GmState -> GmState
+arithmetic1 = primitive1 boxInt unboxInt
+
+arithmetic2 :: (Int -> Int -> Int) -> GmState -> GmState
+arithmetic2 = primitive2 boxInt unboxInt
+
+comparison :: (Int -> Int -> Bool) -> GmState -> GmState
+comparison = primitive2 boxBool unboxInt
 
 -- PRETTY PRINTING RESULTS
 
@@ -158,6 +242,7 @@ showState :: Int -> GmState -> Doc
 showState n state = text "Step" <+> int n <+> text ":" $+$
                     nest 4
                       (vcat [ showStack state
+                            , showDump state
                             , showInstructions (gmCode state)
                             ])
 
@@ -170,6 +255,22 @@ showStack s
 
 showStackItem :: GmState -> Addr -> Doc
 showStackItem s a = text (show a) <> text ":" <+> showNode s a (H.lookup a (gmHeap s))
+
+showDump :: GmState -> Doc
+showDump s
+    = vcat [ text "Dump ["
+           , nest 4 $ vcat (zipWith (showDumpItem s) [0..] (reverse (gmDump s)))
+           , text "]"
+           ]
+
+showDumpItem :: GmState -> Int -> GmDumpItem -> Doc
+showDumpItem s n (code, stack)
+    = text "Item" <+> int n <+> text ":" $+$
+        nest 4
+            (vcat [ showInstructions (take 3 code)
+                  , showStack (s { gmStack = take 3 stack })
+                  ])  $+$
+        text ""
 
 showNode :: GmState -> Addr -> Node -> Doc
 showNode s a (NNum n)      = int n
