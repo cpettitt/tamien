@@ -18,4 +18,6 @@ Library
                        Tamien.Core.Printer
                        Tamien.TI,
                        Tamien.TI.Eval
+                       Tamien.GM,
+                       Tamien.GM.Eval
   Build-depends:       base, parsec, pretty, containers

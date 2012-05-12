@@ -6,6 +6,7 @@ import Tamien.GM.State
 import qualified Tamien.Heap as H
 import Tamien.Heap (Addr, Heap)
 
+import Data.List (foldl')
 import qualified Data.Map as M
 import Text.PrettyPrint
 
@@ -47,6 +48,8 @@ dispatch (Push n)       = push n
 dispatch MkApp          = mkApp
 dispatch (Update n)     = update n
 dispatch (Pop n)        = pop n
+dispatch (Alloc n)      = alloc n
+dispatch (Slide n)      = slide n
 dispatch Unwind         = unwind
 
 pushGlobal :: Name -> GmState -> GmState
@@ -86,6 +89,19 @@ update n state = state { gmStack = stack', gmHeap = heap' }
 
 pop :: Int -> GmState -> GmState
 pop n state = state { gmStack = drop n (gmStack state) }
+
+alloc :: Int -> GmState -> GmState
+alloc n state
+    = state { gmStack = stack'
+            , gmHeap  = heap'
+            }
+    where (stack', heap') = foldl' go (gmStack state, gmHeap state) [1..n]
+          go (stack, heap) _ = (a : stack, heap2)
+                where (a, heap2) = H.alloc (NIndir H.nullAddr) heap
+
+slide :: Int -> GmState -> GmState
+slide n state = state { gmStack = a : drop n as }
+    where (a:as) = gmStack state
 
 unwind :: GmState -> GmState
 unwind state = newState (H.lookup a (gmHeap state))

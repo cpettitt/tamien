@@ -1,8 +1,8 @@
 module Tamien.GM.State where
 
 import Tamien.Core
-import Tamien.Heap as H
-import Tamien.Heap (Heap)
+import Tamien.Heap (Heap, Addr)
+import qualified Tamien.Heap as H
 
 import qualified Data.Map as M
 
@@ -24,6 +24,8 @@ data Instruction
     | MkApp
     | Update Int
     | Pop Int
+    | Alloc Int
+    | Slide Int
     | Unwind
     deriving (Eq, Show)
 

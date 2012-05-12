@@ -13,7 +13,7 @@ type GmCompiledSc = (Name, Int, GmCode)
 
 type GmCompiler = CoreExpr -> GmEnvironment -> GmCode
 
-type GmEnvironment = M.Map Name Int
+type GmEnvironment = [(Name, Int)]
 
 preludeDefs :: CoreProgram
 preludeDefs
@@ -59,21 +59,50 @@ allocSc heap (name, arity, is) = (heap', (name, addr))
 
 compileSc :: CoreScDefn -> GmCompiledSc
 compileSc (ScDefn name env body)
-    = (name, length env, compileR body (M.fromList (zip env [0..])))
+    = (name, length env, compileR body (zip env [0..]))
 
 compileR :: GmCompiler
 compileR e env = compileC e env ++ [Update n, Pop n, Unwind]
-    where n = M.size env
+    where n = length env
 
 compileC :: GmCompiler
 compileC (Num n) env = [PushInt n]
 compileC (Var v) env
-    = case M.lookup v env of
+    = case lookup v env of
         Nothing -> [PushGlobal v]
         Just n  -> [Push n]
 compileC (App e1 e2) env = compileC e2 env ++
                            compileC e1 (argOffset 1 env) ++
                            [MkApp]
+compileC (Let rec defs e) env
+    | rec       = compileLetRec compileC defs e env
+    | otherwise = compileLet    compileC defs e env
+
+compileLetRec :: GmCompiler -> [(Name, CoreExpr)] -> GmCompiler
+compileLetRec comp defs expr env
+    = [Alloc n] ++ compileLetRec' env' defs ++ comp expr env' ++ [Slide n]
+    where n = length defs
+          env' = compileArgs defs (argOffset n env)
+
+compileLetRec' :: GmEnvironment -> [(Name, CoreExpr)] -> GmCode
+compileLetRec' env defs = concat $ zipWith go defs [n-1, n-2 .. 0]
+    where n = length defs
+          go (_, expr) m = compileC expr env ++ [Update m]
+
+compileLet :: GmCompiler -> [(Name, CoreExpr)] -> GmCompiler
+compileLet comp defs expr env
+    = compileLet' env defs ++ comp expr env' ++ [Slide (length defs)]
+    where env' = compileArgs defs env
+
+compileLet' :: GmEnvironment -> [(Name, CoreExpr)] -> GmCode
+compileLet' env defs = fst $ foldl' go ([], env) defs
+    where go (acc, env) (_, expr) = (acc ++ compileC expr env, argOffset 1 env)
+
+compileArgs :: [(Name, CoreExpr)] -> GmEnvironment -> GmEnvironment
+compileArgs defs env
+    = env' ++ env
+    where env' = zip (map fst defs) [n-1, n-2 .. 0]
+          n    = length defs
 
 argOffset :: Int -> GmEnvironment -> GmEnvironment
-argOffset n = M.map (+ n)
+argOffset n = map (second (+ n))

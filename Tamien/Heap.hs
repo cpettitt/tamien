@@ -2,6 +2,7 @@ module Tamien.Heap
     ( Addr
     , Heap
     , empty
+    , nullAddr
     , alloc
     , update
     , free
@@ -31,6 +32,9 @@ instance Eq a => Eq (Heap a) where
 
 empty :: Heap a
 empty = Heap [1..] M.empty
+
+nullAddr :: Addr
+nullAddr = Addr 0
 
 alloc :: a -> Heap a -> (Addr, Heap a)
 alloc _ (Heap [] _) = error "Out of heap ids to assign!"

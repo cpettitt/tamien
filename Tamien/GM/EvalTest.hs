@@ -13,11 +13,25 @@ testId2 = assertProgEq 3 "main = S K K 3"
 
 testId3 = assertProgEq 3 "main = twice (I I I) 3"
 
+testLet = assertProgEq 3 "main = let id = I I I in id 3"
+
+testLetRec = assertProgEq 4
+                          "pair x y f = f x y; \
+                          \fst p = p K; \
+                          \snd p = p K1; \
+                          \f x y = letrec \
+                          \    a = pair x b; \
+                          \    b = pair y a \
+                          \    in fst (snd (snd (snd a))); \
+                          \main = f 3 4"
+
 tests = TestList $
             map TestCase
                 [ testId
                 , testId2
                 , testId3
+                , testLet
+                , testLetRec
                 ]
 
 main = runTestTT tests
