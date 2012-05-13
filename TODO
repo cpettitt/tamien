@@ -1,8 +1,2 @@
-* Reduction engines (to be fleshed out)
-    * Template instantation
-    * G-machine
-    * Lambda calculus
-        * Converter
-        * Beta reduction
-        * Alpha conversion
-        * Eta reduction
+* Support infix primitive ops in Core
+* Read more on strictness analysis
