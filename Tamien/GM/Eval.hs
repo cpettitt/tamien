@@ -152,7 +152,13 @@ dispUnwind state = newState (H.lookup a (gmHeap state))
                       (code, stack) = head dump
           newState (NApp a1 a2)  = state { gmCode = [Unwind], gmStack = a1:a:as }
           newState (NGlobal n c)
-                | length as < n = error "Unwinding with too few arguments"
+                | length as < n
+                    = case gmDump state of
+                        []            -> error "Unwinding with too few arguments"
+                        ((i, s):rest) -> state { gmCode = i
+                                               , gmStack = last (gmStack state) : s
+                                               , gmDump  = rest
+                                               }
                 | otherwise     = state { gmCode = c
                                         , gmStack = rearrangeStack n (gmHeap state) (gmStack state)
                                         }

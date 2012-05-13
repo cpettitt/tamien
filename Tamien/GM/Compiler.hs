@@ -7,6 +7,7 @@ import Tamien.GM.State
 
 import Control.Arrow (second)
 import Data.List (foldl')
+import Data.Maybe (fromJust, isJust)
 import qualified Data.Map as M
 
 type GmCompiledSc = (Name, Int, GmCode)
@@ -35,18 +36,16 @@ preludeDefs
 
 compiledPrimitives :: [GmCompiledSc]
 compiledPrimitives
-    = [("+", 2, [Push 1, Eval, Push 1, Eval, Add, Update 2, Pop 2, Unwind])
-      ,("-", 2, [Push 1, Eval, Push 1, Eval, Sub, Update 2, Pop 2, Unwind])
-      ,("*", 2, [Push 1, Eval, Push 1, Eval, Mul, Update 2, Pop 2, Unwind])
-      ,("/", 2, [Push 1, Eval, Push 1, Eval, Div, Update 2, Pop 2, Unwind])
-      ,("negate", 1, [Push 0, Eval, Neg, Update 1, Pop 1, Unwind])
-      ,("==", 2, [Push 1, Eval, Push 1, Eval, Eq, Update 2, Pop 2, Unwind])
-      ,("/=", 2, [Push 1, Eval, Push 1, Eval, Ne, Update 2, Pop 2, Unwind])
-      ,("<", 2, [Push 1, Eval, Push 1, Eval, Lt, Update 2, Pop 2, Unwind])
-      ,("<=", 2, [Push 1, Eval, Push 1, Eval, Lte, Update 2, Pop 2, Unwind])
-      ,(">", 2, [Push 1, Eval, Push 1, Eval, Gt, Update 2, Pop 2, Unwind])
-      ,(">=", 2, [Push 1, Eval, Push 1, Eval, Gte, Update 2, Pop 2, Unwind])
+    = [("negate", 1, [Push 0, Eval, Neg, Update 1, Pop 1, Unwind])
       ,("if", 3, [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
+      ] ++ map dyadic builtInDyadic
+    where dyadic (op, i) = (op, 2, [Push 1, Eval, Push 1, Eval, i, Update 2, Pop 2, Unwind])
+
+builtInDyadic :: [(Name, Instruction)]
+builtInDyadic
+    = [("+", Add), ("-", Sub), ("*", Mul), ("/", Div)
+      ,("==", Eq), ("/=", Ne)
+      ,(">", Gt), (">=", Gte), ("<", Lt), ("<=", Lte)
       ]
 
 compile :: CoreProgram -> GmState
@@ -78,8 +77,21 @@ compileSc (ScDefn name env body)
     = (name, length env, compileR body (zip env [0..]))
 
 compileR :: GmCompiler
-compileR e env = compileC e env ++ [Update n, Pop n, Unwind]
+compileR e env = compileE e env ++ [Update n, Pop n, Unwind]
     where n = length env
+
+compileE :: GmCompiler
+compileE (Num n) env = [PushInt n]
+compileE (Let rec defs e) env
+    | rec       = compileLetRec compileE defs e env
+    | otherwise = compileLet    compileE defs e env
+compileE (App (Var "negate") e) env = compileE e env ++ [Neg]
+compileE (App (App (Var v) e0) e1) env
+    | isJust op = compileE e1 env ++ compileE e0 (argOffset 1 env) ++ [fromJust op]
+    where op = lookup v builtInDyadic
+compileE (App (App (App (Var "if") e0) e1) e2) env
+    = compileE e0 env ++ [Cond (compileE e1 env) (compileE e2 env)]
+compileE e env = compileC e env ++ [Eval]
 
 compileC :: GmCompiler
 compileC (Num n) env = [PushInt n]
