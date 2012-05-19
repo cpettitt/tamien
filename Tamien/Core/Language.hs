@@ -75,3 +75,13 @@ type CoreScDefn = ScDefn Name
 -- | A program is composed of supercombinator definitions
 type Program a = [ScDefn a]
 type CoreProgram = Program Name
+
+-- | If the given expression is an application, then this function
+--   recursively searches for the function being applied and
+--   returns a tuple of (function, [args])
+findApp :: CoreExpr -> Maybe (CoreExpr, [CoreExpr])
+findApp (App e1 e2) = Just (findApp' e1 [e2])
+    where
+        findApp' (App e1 e2) args = findApp' e1 (e2:args)
+        findApp' e           args = (e, args)
+findApp _           = Nothing
